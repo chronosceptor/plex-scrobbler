@@ -143,12 +143,7 @@ async function sendToTrakt(action, data, metadata) {
     return;
   }
   
-  // Test de conexión antes del scrobble
-  const connectionOk = await testTraktConnection();
-  if (!connectionOk) {
-    console.log('⚠️ Saltando scrobble debido a problemas de conexión');
-    return;
-  }
+  // Connection test removed for speed
   
   const headers = {
     'Content-Type': 'application/json',
@@ -186,22 +181,18 @@ async function sendToTrakt(action, data, metadata) {
     const episode = season.episodes[0];
     
     payload = {
-      item: {
-        type: 'episode',
-        episode: {
-          title: episode.title,
-          number: episode.number
-        },
-        season: {
-          number: season.number
-        },
-        show: {
-          title: show.title,
-          year: show.year,
-          ids: show.ids || {}
-        }
+      progress: progress,
+      episode: {
+        title: episode.title,
+        season: season.number,
+        number: episode.number,
+        ids: {}
       },
-      progress: progress
+      show: {
+        title: show.title,
+        year: show.year,
+        ids: show.ids || {}
+      }
     };
     
     console.log('📺 Payload construido para episodio:', JSON.stringify(payload, null, 2));
@@ -231,15 +222,12 @@ async function sendToTrakt(action, data, metadata) {
     const movie = data.movies[0];
     
     payload = {
-      item: {
-        type: 'movie',
-        movie: {
-          title: movie.title,
-          year: movie.year,
-          ids: {}
-        }
-      },
-      progress: progress
+      progress: progress,
+      movie: {
+        title: movie.title,
+        year: movie.year,
+        ids: movie.ids || {}
+      }
     };
     
     console.log('🎬 Payload construido para película:', JSON.stringify(payload, null, 2));
