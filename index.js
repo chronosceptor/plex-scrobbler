@@ -148,6 +148,40 @@ app.post(CONFIG.server.webhookPath, upload.single('thumb'), async (req, res) => 
   }
 });
 
+// Ruta GET para testing del webhook (opcional)
+app.get(CONFIG.server.webhookPath, (req, res) => {
+  res.send(`
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+      .status { padding: 15px; border-radius: 8px; margin: 20px 0; }
+      .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+      code { background: #f8f9fa; padding: 4px 8px; border-radius: 4px; }
+    </style>
+    <h1>🎬 Plex Webhook Endpoint</h1>
+    <div class="status success">
+      <strong>✅ Webhook funcionando correctamente</strong><br>
+      Este endpoint está listo para recibir eventos de Plex.
+    </div>
+    
+    <h3>📋 Información:</h3>
+    <p><strong>URL para Plex:</strong><br>
+    <code>${CONFIG.server.baseUrl}${CONFIG.server.webhookPath}</code></p>
+    
+    <p><strong>Método:</strong> POST</p>
+    <p><strong>Content-Type:</strong> multipart/form-data</p>
+    
+    <h3>🔧 Para configurar en Plex:</h3>
+    <ol>
+      <li>Ve a <strong>Plex Web → Configuración → Webhooks</strong></li>
+      <li>Haz clic en <strong>"+"</strong></li>
+      <li>Pega la URL de arriba</li>
+      <li>Guarda y reproduce algo para probarlo</li>
+    </ol>
+    
+    <p><a href="${CONFIG.server.baseUrl}/">← Volver al dashboard</a></p>
+  `);
+});
+
 // FUNCIÓN PARA VERIFICAR SI EL USUARIO ESTÁ AUTORIZADO
 function isAllowedUser(payload) {
   const account = payload.Account;
