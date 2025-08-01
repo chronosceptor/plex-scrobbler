@@ -32,9 +32,34 @@ const CONFIG = {
   }
 };
 
-// Variables globales para tokens
-let traktAccessToken = null;
-let traktRefreshToken = null;
+// Funciones para manejar tokens
+async function saveTokens(accessToken, refreshToken) {
+  try {
+    const tokens = {
+      accessToken,
+      refreshToken,
+      timestamp: Date.now()
+    };
+    await fs.writeFile(TOKEN_FILE, JSON.stringify(tokens, null, 2));
+    console.log('✅ Tokens guardados en archivo');
+  } catch (error) {
+    console.error('❌ Error guardando tokens:', error.message);
+  }
+}
+
+async function loadTokens() {
+  try {
+    const data = await fs.readFile(TOKEN_FILE, 'utf8');
+    const tokens = JSON.parse(data);
+    traktAccessToken = tokens.accessToken;
+    traktRefreshToken = tokens.refreshToken;
+    console.log('✅ Tokens cargados desde archivo');
+    return true;
+  } catch (error) {
+    console.log('ℹ️ No se encontraron tokens guardados');
+    return false;
+  }
+}
 
 // Middleware
 app.use(express.json());
@@ -307,15 +332,24 @@ async function sendToTrakt(action, data, metadata) {
   }
   
   try {
+    console.log(`🔄 Enviando ${action.toUpperCase()} a Trakt:`, JSON.stringify(payload, null, 2));
+    
     const response = await axios.post(`${CONFIG.trakt.apiUrl}${endpoint}`, payload, { headers });
     
     console.log(`✅ ${action.toUpperCase()} enviado a Trakt:`, {
       title: metadata.title || metadata.grandparentTitle,
       progress: payload.progress + '%',
-      status: response.status
+      status: response.status,
+      response: response.data
     });
     
   } catch (error) {
+    console.error(`❌ Error enviando a Trakt (${action}):`, {
+      status: error.response?.status,
+      data: error.response?.data,
+      payload: payload
+    });
+    
     if (error.response?.status === 401) {
       console.log('🔄 Token expirado, renovando...');
       await refreshTraktToken();
@@ -339,6 +373,9 @@ async function refreshTraktToken() {
     
     traktAccessToken = response.data.access_token;
     traktRefreshToken = response.data.refresh_token;
+    
+    // Guardar nuevos tokens
+    await saveTokens(traktAccessToken, traktRefreshToken);
     
     console.log('✅ Token de Trakt renovado');
   } catch (error) {
