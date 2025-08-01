@@ -147,6 +147,111 @@ app.get('/callback', async (req, res) => {
   }
 });
 
+// Función para buscar una serie en Trakt y obtener el año correcto
+async function searchShowInTrakt(showTitle) {
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'trakt-api-version': '2',
+      'trakt-api-key': CONFIG.trakt.clientId
+    };
+    
+    const searchUrl = `${CONFIG.trakt.apiUrl}/search/show?query=${encodeURIComponent(showTitle)}`;
+    const response = await axios.get(searchUrl, { headers });
+    
+    if (response.data && response.data.length > 0) {
+      // Tomar el primer resultado (más relevante)
+      const firstResult = response.data[0];
+      if (firstResult.show) {
+        console.log(`🔍 Serie encontrada en Trakt: "${firstResult.show.title}" (${firstResult.show.year})`);
+        return {
+          title: firstResult.show.title,
+          year: firstResult.show.year,
+          ids: firstResult.show.ids
+        };
+      }
+    }
+    
+    console.log(`❌ No se encontró "${showTitle}" en la búsqueda de series en Trakt`);
+    return null;
+  } catch (error) {
+    console.error('❌ Error buscando serie en Trakt:', error.response?.status, error.response?.data);
+    return null;
+  }
+}
+
+// Función para buscar una película en Trakt y obtener el año correcto
+async function searchMovieInTrakt(movieTitle) {
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'trakt-api-version': '2',
+      'trakt-api-key': CONFIG.trakt.clientId
+    };
+    
+    const searchUrl = `${CONFIG.trakt.apiUrl}/search/movie?query=${encodeURIComponent(movieTitle)}`;
+    console.log(`🔍 Buscando película: ${searchUrl}`);
+    const response = await axios.get(searchUrl, { headers });
+    
+    if (response.data && response.data.length > 0) {
+      // Mostrar los primeros resultados para debug
+      console.log(`📋 Encontradas ${response.data.length} películas, primeros 3 resultados:`);
+      response.data.slice(0, 3).forEach((result, index) => {
+        if (result.movie) {
+          console.log(`   ${index + 1}. "${result.movie.title}" (${result.movie.year}) - Score: ${result.score || 'N/A'}`);
+        }
+      });
+      
+      // Tomar el primer resultado (más relevante)
+      const firstResult = response.data[0];
+      if (firstResult.movie) {
+        console.log(`✅ Usando: "${firstResult.movie.title}" (${firstResult.movie.year})`);
+        return {
+          title: firstResult.movie.title,
+          year: firstResult.movie.year,
+          ids: firstResult.movie.ids
+        };
+      }
+    }
+    
+    console.log(`❌ No se encontró "${movieTitle}" en la búsqueda de películas en Trakt`);
+    return null;
+  } catch (error) {
+    console.error('❌ Error buscando película en Trakt:', error.response?.status, error.response?.data);
+    return null;
+  }
+}
+
+// Función para verificar si un episodio específico existe en Trakt
+async function checkEpisodeInTrakt(showSlug, season, episode) {
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'trakt-api-version': '2',
+      'trakt-api-key': CONFIG.trakt.clientId
+    };
+    
+    const episodeUrl = `${CONFIG.trakt.apiUrl}/shows/${showSlug}/seasons/${season}/episodes/${episode}`;
+    console.log(`🔍 Verificando episodio: ${episodeUrl}`);
+    
+    const response = await axios.get(episodeUrl, { headers });
+    
+    if (response.data && response.data.title) {
+      console.log(`✅ Episodio encontrado: "${response.data.title}"`);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    if (error.response?.status === 404) {
+      console.log(`❌ Episodio ${season}x${episode} no existe en Trakt`);
+    } else {
+      console.log(`❌ Error verificando episodio:`, error.response?.status);
+    }
+    return false;
+  }
+}
+
 // FUNCIÓN PARA VERIFICAR SI EL USUARIO ESTÁ AUTORIZADO
 function isAllowedUser(payload) {
   const account = payload.Account;
@@ -268,108 +373,6 @@ app.get(CONFIG.server.webhookPath, (req, res) => {
   `);
 });
 
-// Función para buscar una serie en Trakt y obtener el año correcto
-async function searchShowInTrakt(showTitle) {
-  try {
-    const headers = {
-      'Content-Type': 'application/json',
-      'trakt-api-version': '2',
-      'trakt-api-key': CONFIG.trakt.clientId
-    };
-    
-    const searchUrl = `${CONFIG.trakt.apiUrl}/search/show?query=${encodeURIComponent(showTitle)}`;
-    const response = await axios.get(searchUrl, { headers });
-    
-    if (response.data && response.data.length > 0) {
-      // Tomar el primer resultado (más relevante)
-      const firstResult = response.data[0];
-      if (firstResult.show) {
-        console.log(`🔍 Serie encontrada en Trakt: "${firstResult.show.title}" (${firstResult.show.year})`);
-        return {
-          title: firstResult.show.title,
-          year: firstResult.show.year,
-          ids: firstResult.show.ids
-        };
-      }
-    }
-    
-    console.log(`❌ No se encontró "${showTitle}" en la búsqueda de series en Trakt`);
-    return null;
-  } catch (error) {
-    console.error('❌ Error buscando serie en Trakt:', error.response?.status, error.response?.data);
-    return null;
-  }
-}
-
-// Función para verificar si un episodio específico existe en Trakt
-async function checkEpisodeInTrakt(showSlug, season, episode) {
-  try {
-    const headers = {
-      'Content-Type': 'application/json',
-      'trakt-api-version': '2',
-      'trakt-api-key': CONFIG.trakt.clientId
-    };
-    
-    const episodeUrl = `${CONFIG.trakt.apiUrl}/shows/${showSlug}/seasons/${season}/episodes/${episode}`;
-    console.log(`🔍 Verificando episodio: ${episodeUrl}`);
-    
-    const response = await axios.get(episodeUrl, { headers });
-    
-    if (response.data && response.data.title) {
-      console.log(`✅ Episodio encontrado: "${response.data.title}"`);
-      return true;
-    }
-    
-    return false;
-  } catch (error) {
-    if (error.response?.status === 404) {
-      console.log(`❌ Episodio ${season}x${episode} no existe en Trakt`);
-    } else {
-      console.log(`❌ Error verificando episodio:`, error.response?.status);
-    }
-    return false;
-  }
-}
-async function searchMovieInTrakt(movieTitle) {
-  try {
-    const headers = {
-      'Content-Type': 'application/json',
-      'trakt-api-version': '2',
-      'trakt-api-key': CONFIG.trakt.clientId
-    };
-    
-    const searchUrl = `${CONFIG.trakt.apiUrl}/search/movie?query=${encodeURIComponent(movieTitle)}`;
-    console.log(`🔍 Buscando película: ${searchUrl}`);
-    const response = await axios.get(searchUrl, { headers });
-    
-    if (response.data && response.data.length > 0) {
-      // Mostrar los primeros resultados para debug
-      console.log(`📋 Encontradas ${response.data.length} películas, primeros 3 resultados:`);
-      response.data.slice(0, 3).forEach((result, index) => {
-        if (result.movie) {
-          console.log(`   ${index + 1}. "${result.movie.title}" (${result.movie.year}) - Score: ${result.score || 'N/A'}`);
-        }
-      });
-      
-      // Tomar el primer resultado (más relevante)
-      const firstResult = response.data[0];
-      if (firstResult.movie) {
-        console.log(`✅ Usando: "${firstResult.movie.title}" (${firstResult.movie.year})`);
-        return {
-          title: firstResult.movie.title,
-          year: firstResult.movie.year,
-          ids: firstResult.movie.ids
-        };
-      }
-    }
-    
-    console.log(`❌ No se encontró "${movieTitle}" en la búsqueda de películas en Trakt`);
-    return null;
-  } catch (error) {
-    console.error('❌ Error buscando película en Trakt:', error.response?.status, error.response?.data);
-    return null;
-  }
-}
 // PASO 3: Procesar eventos de Plex
 async function handlePlexEvent(payload) {
   const { event, Metadata } = payload;
@@ -524,7 +527,7 @@ async function handlePlexEvent(payload) {
   }
 }
 
-// PASO 4: Enviar datos a Trakt.tv
+// PASO 4: Enviar datos a Trakt.tv - FORMATO CORRECTO
 async function sendToTrakt(action, data, metadata) {
   // Validar que tenemos un token válido
   if (!traktAccessToken) {
@@ -540,41 +543,82 @@ async function sendToTrakt(action, data, metadata) {
   };
   
   let endpoint;
-  let payload = { ...data };
+  let payload = {};
+  
+  // Calcular progreso
+  let progress = 0;
+  if (metadata.viewOffset && metadata.duration) {
+    progress = Math.round((metadata.viewOffset / metadata.duration) * 100);
+  }
   
   // Determinar endpoint según la acción
   switch (action) {
     case 'start':
       endpoint = '/scrobble/start';
-      if (metadata.viewOffset && metadata.duration) {
-        payload.progress = Math.round((metadata.viewOffset / metadata.duration) * 100);
-      } else {
-        payload.progress = 0;
-      }
       break;
     case 'pause':
       endpoint = '/scrobble/pause';
-      if (metadata.viewOffset && metadata.duration) {
-        payload.progress = Math.round((metadata.viewOffset / metadata.duration) * 100);
-      } else {
-        payload.progress = 0;
-      }
       break;
     case 'stop':
       endpoint = '/scrobble/stop';
-      if (metadata.viewOffset && metadata.duration) {
-        payload.progress = Math.round((metadata.viewOffset / metadata.duration) * 100);
-      } else {
-        payload.progress = 100; // Asumir completado si no hay datos
-      }
       break;
     default:
       console.log('❌ Acción no reconocida:', action);
       return;
   }
   
+  // Construir payload según formato correcto de Trakt API
+  if (data.shows && data.shows.length > 0) {
+    // Para series/episodios
+    const show = data.shows[0];
+    const season = show.seasons[0];
+    const episode = season.episodes[0];
+    
+    payload = {
+      item: {
+        type: 'episode',
+        episode: {
+          title: episode.title,
+          number: episode.number
+        },
+        season: {
+          number: season.number
+        },
+        show: {
+          title: show.title,
+          year: show.year,
+          ids: {}
+        }
+      },
+      progress: progress
+    };
+    
+    console.log('📺 Payload construido para episodio:', JSON.stringify(payload, null, 2));
+    
+  } else if (data.movies && data.movies.length > 0) {
+    // Para películas
+    const movie = data.movies[0];
+    
+    payload = {
+      item: {
+        type: 'movie',
+        movie: {
+          title: movie.title,
+          year: movie.year,
+          ids: {}
+        }
+      },
+      progress: progress
+    };
+    
+    console.log('🎬 Payload construido para película:', JSON.stringify(payload, null, 2));
+  } else {
+    console.log('❌ Datos inválidos recibidos:', JSON.stringify(data, null, 2));
+    return;
+  }
+  
   try {
-    console.log(`🔄 Enviando ${action.toUpperCase()} a Trakt:`, {
+    console.log(`🔄 Enviando ${action.toUpperCase()} a Trakt con formato correcto:`, {
       endpoint: `${CONFIG.trakt.apiUrl}${endpoint}`,
       payload: JSON.stringify(payload, null, 2)
     });
@@ -583,7 +627,7 @@ async function sendToTrakt(action, data, metadata) {
     
     console.log(`✅ ${action.toUpperCase()} enviado a Trakt exitosamente:`, {
       title: metadata.title || metadata.grandparentTitle,
-      progress: payload.progress + '%',
+      progress: progress + '%',
       status: response.status,
       action: response.data?.action || 'unknown',
       traktResponse: response.data
@@ -613,51 +657,16 @@ async function sendToTrakt(action, data, metadata) {
       console.log('🔄 Reintentando con token renovado...');
       await sendToTrakt(action, data, metadata);
     } else if (error.response?.status === 404) {
-      console.log(`⚠️ ERROR 404 - Contenido no encontrado en Trakt:`);
-      if (metadata.type === 'episode') {
-        console.log(`   🎭 Serie buscada: "${metadata.grandparentTitle}"`);
-        console.log(`   📺 Episodio: ${metadata.parentIndex}x${metadata.index} - "${metadata.title}"`);
-        console.log(`   📅 Año de la serie: ${metadata.grandparentYear || 'N/A'}`);
-        console.log(`   🔍 Buscar en: https://trakt.tv/search?query=${encodeURIComponent(metadata.grandparentTitle)}`);
-      } else {
-        console.log(`   🎬 Película: "${metadata.title}"`);
-        console.log(`   📅 Año: ${metadata.year || 'N/A'}`);
-        console.log(`   🔍 Buscar en: https://trakt.tv/search?query=${encodeURIComponent(metadata.title)}`);
-        
-        // Intentar fallback: buscar película sin año específico
-        console.log('🔄 Intentando fallback: buscando película sin año específico...');
-        try {
-          const fallbackData = {
-            movies: [{
-              title: metadata.title
-              // Sin año para que Trakt busque cualquier versión
-            }]
-          };
-          
-          const fallbackHeaders = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${traktAccessToken}`,
-            'trakt-api-version': '2',
-            'trakt-api-key': CONFIG.trakt.clientId
-          };
-          
-          console.log('🔄 Payload de fallback:', JSON.stringify(fallbackData, null, 2));
-          const fallbackResponse = await axios.post(`${CONFIG.trakt.apiUrl}/sync/history`, fallbackData, { headers: fallbackHeaders });
-          console.log('✅ Fallback exitoso: Película marcada en historial general');
-        } catch (fallbackError) {
-          console.log('❌ Fallback también falló:', fallbackError.response?.status, fallbackError.response?.data);
-          console.log('💡 Solución manual: Ve a https://trakt.tv y agrega la película manualmente a tu lista');
-        }
-      }
-      console.log('💡 Posibles soluciones:');
-      console.log('   1. Verifica que el contenido existe en la URL de arriba');
-      console.log('   2. Agrega manualmente el contenido a tu lista en Trakt.tv');
-      console.log('   3. Verifica que el título y año sean exactos');
-      console.log('   4. Algunos contenidos pueden tener nombres ligeramente diferentes');
+      console.log(`⚠️ ERROR 404 - Contenido no encontrado en Trakt con formato correcto`);
+      console.log('💡 Intentando método de fallback...');
+      // TODO: Implementar fallback con sync endpoints si es necesario
     } else if (error.response?.status === 422) {
       console.log(`⚠️ ERROR 422 - Datos inválidos enviados a Trakt:`);
       console.log('   Los datos enviados no cumplen con el formato esperado');
       console.log('   Payload enviado:', JSON.stringify(payload, null, 2));
+    } else if (error.response?.status === 409) {
+      console.log(`⚠️ ERROR 409 - Contenido ya fue scrobbled recientemente`);
+      console.log('   Trakt evita duplicados, esto es normal');
     } else {
       console.error(`❌ Error inesperado (${error.response?.status}):`, error.response?.data);
     }
