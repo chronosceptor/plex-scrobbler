@@ -194,9 +194,10 @@ app.post(CONFIG.server.webhookPath, upload.single('thumb'), async (req, res) => 
       user: payload.Account?.title,
       userId: payload.Account?.id,
       owner: payload.owner,
-      media: payload.Metadata?.title,
+      // Información detallada para debugging
+      episodeTitle: payload.Metadata?.title,           // "The House of Seven Gargoyles"
+      seriesTitle: payload.Metadata?.grandparentTitle, // "Jonny Quest" 
       type: payload.Metadata?.type,
-      show: payload.Metadata?.grandparentTitle,
       season: payload.Metadata?.parentIndex,
       episode: payload.Metadata?.index,
       year: payload.Metadata?.year || payload.Metadata?.grandparentYear,
@@ -286,10 +287,14 @@ async function handlePlexEvent(payload) {
         return;
       }
       
+      // Intentar diferentes variaciones para mayor compatibilidad
+      const showYear = Metadata.grandparentYear;
+      
       traktData = {
         shows: [{
           title: Metadata.grandparentTitle,
-          year: Metadata.grandparentYear,
+          // Solo incluir año si parece correcto (dentro de un rango razonable)
+          ...(showYear && showYear > 1900 && showYear < 2030 ? { year: parseInt(showYear) } : {}),
           seasons: [{
             number: parseInt(Metadata.parentIndex),
             episodes: [{
@@ -301,11 +306,12 @@ async function handlePlexEvent(payload) {
       };
       
       console.log('📺 Datos de serie preparados:', {
-        show: Metadata.grandparentTitle,
-        year: Metadata.grandparentYear,
-        season: Metadata.parentIndex,
-        episode: Metadata.index,
-        episodeTitle: Metadata.title
+        series: Metadata.grandparentTitle,    // "Jonny Quest"
+        year: showYear || 'Sin año especificado',
+        season: Metadata.parentIndex,         // 1
+        episode: Metadata.index,              // 23
+        episodeTitle: Metadata.title,         // "The House of Seven Gargoyles"
+        traktPayload: JSON.stringify(traktData, null, 2)
       });
       
     } else if (Metadata.type === 'movie') {
@@ -444,16 +450,21 @@ async function sendToTrakt(action, data, metadata) {
       await sendToTrakt(action, data, metadata);
     } else if (error.response?.status === 404) {
       console.log(`⚠️ ERROR 404 - Contenido no encontrado en Trakt:`);
-      console.log(`   📺 Título: "${metadata.title || metadata.grandparentTitle}"`);
-      console.log(`   📅 Año: ${metadata.year || metadata.grandparentYear || 'N/A'}`);
       if (metadata.type === 'episode') {
-        console.log(`   🎭 Serie: "${metadata.grandparentTitle}"`);
-        console.log(`   📺 Temporada: ${metadata.parentIndex}, Episodio: ${metadata.index}`);
+        console.log(`   🎭 Serie buscada: "${metadata.grandparentTitle}"`);
+        console.log(`   📺 Episodio: ${metadata.parentIndex}x${metadata.index} - "${metadata.title}"`);
+        console.log(`   📅 Año de la serie: ${metadata.grandparentYear || 'N/A'}`);
+        console.log(`   🔍 Buscar en: https://trakt.tv/search?query=${encodeURIComponent(metadata.grandparentTitle)}`);
+      } else {
+        console.log(`   🎬 Película: "${metadata.title}"`);
+        console.log(`   📅 Año: ${metadata.year || 'N/A'}`);
+        console.log(`   🔍 Buscar en: https://trakt.tv/search?query=${encodeURIComponent(metadata.title)}`);
       }
       console.log('💡 Posibles soluciones:');
-      console.log('   1. Verifica que el contenido existe en https://trakt.tv/search');
+      console.log('   1. Verifica que el contenido existe en la URL de arriba');
       console.log('   2. Agrega manualmente el contenido a tu lista en Trakt.tv');
       console.log('   3. Verifica que el título y año sean exactos');
+      console.log('   4. Algunos contenidos pueden tener nombres ligeramente diferentes');
     } else if (error.response?.status === 422) {
       console.log(`⚠️ ERROR 422 - Datos inválidos enviados a Trakt:`);
       console.log('   Los datos enviados no cumplen con el formato esperado');
