@@ -483,6 +483,9 @@ app.get('/', (req, res) => {
     CONFIG.plex.allowedUsers?.length ? `Usuarios: ${CONFIG.plex.allowedUsers.join(', ')}` :
     CONFIG.plex.allowedUserIds?.length ? `IDs: ${CONFIG.plex.allowedUserIds.join(', ')}` :
     'Sin filtro configurado';
+  
+  // Verificar estado de token de forma segura
+  const isAuthenticated = traktAccessToken ? true : false;
     
   res.send(`
     <style>
@@ -495,8 +498,8 @@ app.get('/', (req, res) => {
     </style>
     <h1>🎬 Plex Scrobbler → Trakt.tv</h1>
     
-    <div class="status ${traktAccessToken ? 'success' : 'warning'}">
-      <strong>Estado de conexión:</strong> ${traktAccessToken ? '✅ Conectado con Trakt.tv' : '❌ No autenticado'}
+    <div class="status ${isAuthenticated ? 'success' : 'warning'}">
+      <strong>Estado de conexión:</strong> ${isAuthenticated ? '✅ Conectado con Trakt.tv' : '❌ No autenticado'}
     </div>
     
     <div class="status info">
@@ -506,7 +509,7 @@ app.get('/', (req, res) => {
       <strong>Versión Node.js:</strong> ${process.version}
     </div>
     
-    ${!traktAccessToken ? '<p><a href="/plex-scrobbler/auth" style="background:#007bff;color:white;padding:10px 15px;text-decoration:none;border-radius:5px;">🔐 Conectar con Trakt.tv</a></p>' : ''}
+    ${!isAuthenticated ? '<p><a href="/plex-scrobbler/auth" style="background:#007bff;color:white;padding:10px 15px;text-decoration:none;border-radius:5px;">🔐 Conectar con Trakt.tv</a></p>' : ''}
     
     <h3>📡 Configuración del Webhook</h3>
     <p>URL para configurar en Plex:</p>
