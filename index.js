@@ -102,7 +102,7 @@ app.get('/callback', async (req, res) => {
     res.send(`
       <h1>¡Autenticación exitosa!</h1>
       <p>Tu Plex Scrobbler está ahora conectado con Trakt.tv</p>
-      <p><a href="/">← Volver al inicio</a></p>
+      <p><a href="/plex-scrobbler/">← Volver al inicio</a></p>
     `);
   } catch (error) {
     console.error('❌ Error en autenticación:', error.response?.data || error.message);
@@ -341,7 +341,7 @@ app.get('/', (req, res) => {
       <strong>Versión Node.js:</strong> ${process.version}
     </div>
     
-    ${!traktAccessToken ? '<p><a href="/auth" style="background:#007bff;color:white;padding:10px 15px;text-decoration:none;border-radius:5px;">🔐 Conectar con Trakt.tv</a></p>' : ''}
+    ${!traktAccessToken ? '<p><a href="/plex-scrobbler/auth" style="background:#007bff;color:white;padding:10px 15px;text-decoration:none;border-radius:5px;">🔐 Conectar con Trakt.tv</a></p>' : ''}
     
     <h3>📡 Configuración del Webhook</h3>
     <p>URL para configurar en Plex:</p>
@@ -356,7 +356,7 @@ app.get('/', (req, res) => {
     </ol>
     
     <hr>
-    <p><a href="/debug/last-event">🐛 Ver información de debugging</a></p>
+    <p><a href="/plex-scrobbler/debug/last-event">🐛 Ver información de debugging</a></p>
     <small>Plex Scrobbler v1.0 - <a href="https://chronosceptor.com">chronosceptor.com</a></small>
   `);
 });
