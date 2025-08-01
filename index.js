@@ -145,7 +145,14 @@ app.post(CONFIG.server.webhookPath, upload.single('thumb'), async (req, res) => 
       user: payload.Account?.title,
       userId: payload.Account?.id,
       owner: payload.owner,
-      media: payload.Metadata?.title
+      media: payload.Metadata?.title,
+      type: payload.Metadata?.type,
+      // Información adicional para debugging
+      show: payload.Metadata?.grandparentTitle,
+      season: payload.Metadata?.parentIndex,
+      episode: payload.Metadata?.index,
+      year: payload.Metadata?.year || payload.Metadata?.grandparentYear,
+      guid: payload.Metadata?.guid
     });
     
     // FILTRO DE USUARIO - Solo procesar TU usuario
@@ -257,28 +264,60 @@ async function handlePlexEvent(payload) {
     let traktData;
     
     if (Metadata.type === 'episode') {
-      // Para series
+      // Para series - validar datos requeridos
+      if (!Metadata.grandparentTitle || !Metadata.parentIndex || !Metadata.index) {
+        console.log('❌ Datos incompletos para episodio:', {
+          show: Metadata.grandparentTitle,
+          season: Metadata.parentIndex,
+          episode: Metadata.index,
+          title: Metadata.title
+        });
+        return;
+      }
+      
       traktData = {
         shows: [{
           title: Metadata.grandparentTitle,
           year: Metadata.grandparentYear,
           seasons: [{
-            number: Metadata.parentIndex,
+            number: parseInt(Metadata.parentIndex),
             episodes: [{
-              number: Metadata.index,
+              number: parseInt(Metadata.index),
               title: Metadata.title
             }]
           }]
         }]
       };
+      
+      console.log('📺 Datos de serie preparados:', {
+        show: Metadata.grandparentTitle,
+        year: Metadata.grandparentYear,
+        season: Metadata.parentIndex,
+        episode: Metadata.index,
+        episodeTitle: Metadata.title
+      });
+      
     } else if (Metadata.type === 'movie') {
-      // Para películas
+      // Para películas - validar datos requeridos
+      if (!Metadata.title) {
+        console.log('❌ Datos incompletos para película:', {
+          title: Metadata.title,
+          year: Metadata.year
+        });
+        return;
+      }
+      
       traktData = {
         movies: [{
           title: Metadata.title,
-          year: Metadata.year
+          year: parseInt(Metadata.year) || null
         }]
       };
+      
+      console.log('🎬 Datos de película preparados:', {
+        title: Metadata.title,
+        year: Metadata.year
+      });
     }
     
     // Mapear eventos de Plex a acciones de Trakt
@@ -291,18 +330,27 @@ async function handlePlexEvent(payload) {
     };
     
     const traktAction = eventMapping[event];
-    if (!traktAction) return;
+    if (!traktAction) {
+      console.log('⚠️ Evento no mapeado:', event);
+      return;
+    }
     
     // Enviar a Trakt
     await sendToTrakt(traktAction, traktData, Metadata);
     
   } catch (error) {
-    console.error('❌ Error enviando a Trakt:', error.response?.data || error.message);
+    console.error('❌ Error procesando evento de Plex:', error.message);
   }
 }
 
 // PASO 4: Enviar datos a Trakt.tv
 async function sendToTrakt(action, data, metadata) {
+  // Validar que tenemos un token válido
+  if (!traktAccessToken) {
+    console.log('❌ No hay token de acceso disponible');
+    return;
+  }
+  
   const headers = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${traktAccessToken}`,
@@ -317,46 +365,92 @@ async function sendToTrakt(action, data, metadata) {
   switch (action) {
     case 'start':
       endpoint = '/scrobble/start';
-      payload.progress = Math.round((metadata.viewOffset / metadata.duration) * 100) || 0;
+      // Calcular progreso si está disponible
+      if (metadata.viewOffset && metadata.duration) {
+        payload.progress = Math.round((metadata.viewOffset / metadata.duration) * 100);
+      } else {
+        payload.progress = 0;
+      }
       break;
     case 'pause':
       endpoint = '/scrobble/pause';
-      payload.progress = Math.round((metadata.viewOffset / metadata.duration) * 100) || 0;
+      if (metadata.viewOffset && metadata.duration) {
+        payload.progress = Math.round((metadata.viewOffset / metadata.duration) * 100);
+      } else {
+        payload.progress = 0;
+      }
       break;
     case 'stop':
       endpoint = '/scrobble/stop';
-      payload.progress = Math.round((metadata.viewOffset / metadata.duration) * 100) || 100;
+      if (metadata.viewOffset && metadata.duration) {
+        payload.progress = Math.round((metadata.viewOffset / metadata.duration) * 100);
+      } else {
+        payload.progress = 100; // Asumir completado si no hay datos
+      }
       break;
     default:
+      console.log('❌ Acción no reconocida:', action);
       return;
   }
   
   try {
-    console.log(`🔄 Enviando ${action.toUpperCase()} a Trakt:`, JSON.stringify(payload, null, 2));
+    console.log(`🔄 Enviando ${action.toUpperCase()} a Trakt:`, {
+      endpoint: `${CONFIG.trakt.apiUrl}${endpoint}`,
+      payload: JSON.stringify(payload, null, 2)
+    });
     
     const response = await axios.post(`${CONFIG.trakt.apiUrl}${endpoint}`, payload, { headers });
     
-    console.log(`✅ ${action.toUpperCase()} enviado a Trakt:`, {
+    console.log(`✅ ${action.toUpperCase()} enviado a Trakt exitosamente:`, {
       title: metadata.title || metadata.grandparentTitle,
       progress: payload.progress + '%',
       status: response.status,
-      response: response.data
+      action: response.data?.action || 'unknown',
+      traktResponse: response.data
     });
     
   } catch (error) {
     console.error(`❌ Error enviando a Trakt (${action}):`, {
       status: error.response?.status,
+      statusText: error.response?.statusText,
       data: error.response?.data,
-      payload: payload
+      url: `${CONFIG.trakt.apiUrl}${endpoint}`,
+      headers: { ...headers, Authorization: '[HIDDEN]' }, // Ocultar token en logs
+      sentPayload: payload,
+      mediaInfo: {
+        title: metadata.title || metadata.grandparentTitle,
+        type: metadata.type,
+        year: metadata.year || metadata.grandparentYear,
+        season: metadata.parentIndex,
+        episode: metadata.index
+      }
     });
     
+    // Manejar diferentes tipos de errores
     if (error.response?.status === 401) {
       console.log('🔄 Token expirado, renovando...');
       await refreshTraktToken();
-      // Reintentar
+      // Reintentar una vez
+      console.log('🔄 Reintentando con token renovado...');
       await sendToTrakt(action, data, metadata);
+    } else if (error.response?.status === 404) {
+      console.log(`⚠️ ERROR 404 - Contenido no encontrado en Trakt:`);
+      console.log(`   📺 Título: "${metadata.title || metadata.grandparentTitle}"`);
+      console.log(`   📅 Año: ${metadata.year || metadata.grandparentYear || 'N/A'}`);
+      if (metadata.type === 'episode') {
+        console.log(`   🎭 Serie: "${metadata.grandparentTitle}"`);
+        console.log(`   📺 Temporada: ${metadata.parentIndex}, Episodio: ${metadata.index}`);
+      }
+      console.log('💡 Posibles soluciones:');
+      console.log('   1. Verifica que el contenido existe en https://trakt.tv/search');
+      console.log('   2. Agrega manualmente el contenido a tu lista en Trakt.tv');
+      console.log('   3. Verifica que el título y año sean exactos');
+    } else if (error.response?.status === 422) {
+      console.log(`⚠️ ERROR 422 - Datos inválidos enviados a Trakt:`);
+      console.log('   Los datos enviados no cumplen con el formato esperado');
+      console.log('   Payload enviado:', JSON.stringify(payload, null, 2));
     } else {
-      throw error;
+      console.error(`❌ Error inesperado (${error.response?.status}):`, error.response?.data);
     }
   }
 }
