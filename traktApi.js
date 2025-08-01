@@ -173,6 +173,27 @@ async function sendToTrakt(action, data, metadata) {
     
     console.log('📺 Payload construido para episodio:', JSON.stringify(payload, null, 2));
     
+    // Verificar que el episodio existe antes de hacer scrobble
+    if (show.ids?.slug) {
+      const episodeExists = await checkEpisodeInTrakt(show.ids.slug, season.number, episode.number);
+      if (!episodeExists) {
+        console.log(`⚠️ Episodio ${season.number}x${episode.number} no existe en Trakt, enviando scrobble genérico de la serie`);
+        // En lugar de scrobble de episodio específico, enviar un scrobble genérico
+        payload = {
+          item: {
+            type: 'show',
+            show: {
+              title: show.title,
+              year: show.year,
+              ids: show.ids
+            }
+          },
+          progress: progress
+        };
+        console.log('📺 Usando payload genérico de serie:', JSON.stringify(payload, null, 2));
+      }
+    }
+    
   } else if (data.movies && data.movies.length > 0) {
     const movie = data.movies[0];
     
