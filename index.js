@@ -301,7 +301,35 @@ async function searchShowInTrakt(showTitle) {
   }
 }
 
-// Función para buscar una película en Trakt y obtener el año correcto
+// Función para verificar si un episodio específico existe en Trakt
+async function checkEpisodeInTrakt(showSlug, season, episode) {
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'trakt-api-version': '2',
+      'trakt-api-key': CONFIG.trakt.clientId
+    };
+    
+    const episodeUrl = `${CONFIG.trakt.apiUrl}/shows/${showSlug}/seasons/${season}/episodes/${episode}`;
+    console.log(`🔍 Verificando episodio: ${episodeUrl}`);
+    
+    const response = await axios.get(episodeUrl, { headers });
+    
+    if (response.data && response.data.title) {
+      console.log(`✅ Episodio encontrado: "${response.data.title}"`);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    if (error.response?.status === 404) {
+      console.log(`❌ Episodio ${season}x${episode} no existe en Trakt`);
+    } else {
+      console.log(`❌ Error verificando episodio:`, error.response?.status);
+    }
+    return false;
+  }
+}
 async function searchMovieInTrakt(movieTitle) {
   try {
     const headers = {
@@ -372,12 +400,24 @@ async function handlePlexEvent(payload) {
       
       let finalYear;
       let finalTitle = Metadata.grandparentTitle;
+      let showSlug = null;
       
       if (traktShow) {
         // Usar datos de Trakt
         finalYear = traktShow.year;
-        finalTitle = traktShow.title; // Por si hay ligeras diferencias en el título
+        finalTitle = traktShow.title;
+        showSlug = traktShow.ids?.slug;
         console.log(`✅ Usando datos de Trakt: "${finalTitle}" (${finalYear})`);
+        
+        // Verificar si el episodio específico existe
+        if (showSlug) {
+          const episodeExists = await checkEpisodeInTrakt(showSlug, Metadata.parentIndex, Metadata.index);
+          if (!episodeExists) {
+            console.log(`⚠️ El episodio ${Metadata.parentIndex}x${Metadata.index} no existe en Trakt`);
+            console.log(`💡 Se intentará scrobble genérico de la serie completa`);
+          }
+        }
+        
       } else {
         // Fallback a lógica anterior
         if (Metadata.grandparentYear) {
