@@ -189,7 +189,7 @@ app.post(CONFIG.server.webhookPath, upload.single('thumb'), async (req, res) => 
   try {
     const payload = JSON.parse(req.body.payload);
     
-    console.log('📡 Webhook recibido:', {
+    console.log('📡 Webhook recibido - DATOS COMPLETOS:', {
       event: payload.event,
       user: payload.Account?.title,
       userId: payload.Account?.id,
@@ -197,11 +197,16 @@ app.post(CONFIG.server.webhookPath, upload.single('thumb'), async (req, res) => 
       // Información detallada para debugging
       episodeTitle: payload.Metadata?.title,           // "The House of Seven Gargoyles"
       seriesTitle: payload.Metadata?.grandparentTitle, // "Jonny Quest" 
-      type: payload.Metadata?.type,
-      season: payload.Metadata?.parentIndex,
-      episode: payload.Metadata?.index,
-      year: payload.Metadata?.year || payload.Metadata?.grandparentYear,
-      guid: payload.Metadata?.guid
+      type: payload.Metadata?.type,                    // "episode"
+      season: payload.Metadata?.parentIndex,           // 1
+      episode: payload.Metadata?.index,                // 23
+      episodeYear: payload.Metadata?.year,             // 1965 (año del episodio)
+      seriesYear: payload.Metadata?.grandparentYear,   // null o undefined
+      originallyAvailableAt: payload.Metadata?.originallyAvailableAt, // Fecha completa
+      guid: payload.Metadata?.guid,
+      // Datos adicionales que pueden ser útiles
+      duration: payload.Metadata?.duration,
+      viewOffset: payload.Metadata?.viewOffset
     });
     
     // FILTRO DE USUARIO - Solo procesar TU usuario
@@ -287,14 +292,29 @@ async function handlePlexEvent(payload) {
         return;
       }
       
-      // Intentar diferentes variaciones para mayor compatibilidad
-      const showYear = Metadata.grandparentYear;
+      // Lógica inteligente para determinar el año de la serie
+      let finalYear;
+      
+      if (Metadata.grandparentYear) {
+        // Si tenemos el año de la serie, úsalo directamente
+        finalYear = parseInt(Metadata.grandparentYear);
+        console.log(`📅 Usando año de la serie: ${finalYear}`);
+      } else if (Metadata.year) {
+        // Si solo tenemos el año del episodio, úsalo tal como está
+        // Trakt es lo suficientemente inteligente para encontrar la serie correcta
+        finalYear = parseInt(Metadata.year);
+        console.log(`📅 Usando año del episodio: ${finalYear}`);
+      } else {
+        // Sin año, intentar sin especificar año
+        finalYear = null;
+        console.log(`⚠️ Sin información de año disponible`);
+      }
       
       traktData = {
         shows: [{
           title: Metadata.grandparentTitle,
-          // Solo incluir año si parece correcto (dentro de un rango razonable)
-          ...(showYear && showYear > 1900 && showYear < 2030 ? { year: parseInt(showYear) } : {}),
+          // Incluir año si lo tenemos
+          ...(finalYear ? { year: finalYear } : {}),
           seasons: [{
             number: parseInt(Metadata.parentIndex),
             episodes: [{
@@ -306,12 +326,13 @@ async function handlePlexEvent(payload) {
       };
       
       console.log('📺 Datos de serie preparados:', {
-        series: Metadata.grandparentTitle,    // "Jonny Quest"
-        year: showYear || 'Sin año especificado',
-        season: Metadata.parentIndex,         // 1
-        episode: Metadata.index,              // 23
-        episodeTitle: Metadata.title,         // "The House of Seven Gargoyles"
-        traktPayload: JSON.stringify(traktData, null, 2)
+        series: Metadata.grandparentTitle,    
+        episodeYear: Metadata.year || 'N/A',
+        seriesYear: Metadata.grandparentYear || 'N/A', 
+        yearUsed: finalYear || 'Sin año',
+        season: Metadata.parentIndex,         
+        episode: Metadata.index,              
+        episodeTitle: Metadata.title
       });
       
     } else if (Metadata.type === 'movie') {
