@@ -1,176 +1,134 @@
-# Plex-Trakt CLI
+# Plex-Trakt Scrobbler
 
-CLI simple para sincronizar tu actividad de Plex con Trakt.tv automáticamente.
+A simple CLI tool to automatically sync your Plex viewing activity to Trakt.tv using webhooks.
 
-## ¿Qué hace?
+## Features
 
-- 🎬 Sincroniza automáticamente lo que ves en Plex con tu cuenta de Trakt.tv
-- 📺 Funciona con series y películas
-- 🔄 Scrobbling en tiempo real (play, pause, stop)
-- 👤 Filtros de usuario (solo tú o usuarios específicos)
-- 🔧 CLI simple sin interfaz web
+- 🎬 Automatically scrobbles movies and TV episodes from Plex to Trakt
+- 🔄 Real-time syncing via Plex webhooks
+- 👤 User filtering (owner only, specific users, or all users)
+- 🔐 Secure OAuth authentication with Trakt.tv
+- 📊 Progress tracking for pause/resume functionality
 
-## Instalación
+## Quick Setup
 
-1. Clona o descarga el proyecto
-2. Instala dependencias:
-```bash
-npm install
-```
+1. **Clone and install**
+   ```bash
+   git clone <repository-url>
+   cd plex-trakt
+   npm install
+   ```
 
-3. Crea tu archivo `.env` con tu configuración:
-```bash
-cp .env.example .env
-```
+2. **Create Trakt.tv application**
+   - Go to [Trakt.tv API Apps](https://trakt.tv/oauth/applications)
+   - Create a new application
+   - Set redirect URI to: `http://localhost:3000/callback` (or your server URL)
 
-## Configuración
+3. **Configure environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your Trakt.tv credentials
+   ```
 
-### 1. Obtener credenciales de Trakt.tv
+4. **Authenticate with Trakt**
+   ```bash
+   npm run auth
+   ```
 
-1. Ve a https://trakt.tv/oauth/applications
-2. Crea una nueva aplicación
-3. Usa esta URL de redirect: `http://localhost:3000/callback`
-4. Copia tu Client ID y Client Secret
+5. **Start the webhook listener**
+   ```bash
+   npm run listen
+   ```
 
-### 2. Configurar .env
+6. **Configure Plex webhook**
+   - Go to Plex Web → Settings → Webhooks
+   - Add webhook URL: `http://localhost:3000/webhook`
+
+## Environment Variables
+
+Create a `.env` file with these required variables:
 
 ```env
-# Credenciales de Trakt.tv (OBLIGATORIOS)
-TRAKT_CLIENT_ID=tu_client_id_aqui
-TRAKT_CLIENT_SECRET=tu_client_secret_aqui
+# Required - Get from https://trakt.tv/oauth/applications
+TRAKT_CLIENT_ID=your_client_id
+TRAKT_CLIENT_SECRET=your_client_secret
 
-# Puerto para el webhook (opcional, por defecto 3000)
+# Optional - Server configuration
 WEBHOOK_PORT=3000
-
-# URL base para webhooks (opcional, se auto-detecta)
 WEBHOOK_BASE_URL=http://localhost:3000
+WEBHOOK_PATH=/webhook
 
-# Filtros de usuario (elige UNA opción):
-
-# Opción 1: Solo el propietario del servidor Plex
+# Optional - User filtering
 PLEX_OWNER_ONLY=true
-
-# Opción 2: Lista de nombres de usuario permitidos
-PLEX_ALLOWED_USERS=Tu Nombre,Otro Usuario
-
-# Opción 3: Lista de IDs de usuario (más seguro)
-PLEX_ALLOWED_USER_IDS=12345,67890
+# OR
+PLEX_ALLOWED_USERS=user1,user2,user3
+# OR
+PLEX_ALLOWED_USER_IDS=123,456,789
 ```
 
-## Uso
-
-### 1. Autenticarse con Trakt.tv
+## Commands
 
 ```bash
-npm run auth
+npm run auth     # Authenticate with Trakt.tv
+npm run listen   # Start webhook listener  
+npm run start    # Show help
+node index.js status  # Show connection status
 ```
 
-- Se abrirá tu navegador
-- Autoriza la aplicación en Trakt.tv
-- Vuelve a la terminal cuando veas "Authentication Successful"
+## User Filtering
 
-### 2. Iniciar el listener de webhooks
+Control who can scrobble to your Trakt account:
 
-```bash
-npm run listen
-```
+- **Owner only**: `PLEX_OWNER_ONLY=true`
+- **Specific users**: `PLEX_ALLOWED_USERS=john,jane,bob`
+- **Specific user IDs**: `PLEX_ALLOWED_USER_IDS=123,456,789`
+- **All users**: Leave all filtering options empty
 
-- Mantén esta terminal abierta
-- La app escuchará webhooks de Plex en el puerto 3000
+## How It Works
 
-### 3. Configurar Plex
+1. Plex sends webhook events when users play/pause/stop media
+2. The app receives these webhooks and processes them
+3. It searches Trakt.tv for the movie/show to get proper metadata
+4. It sends scrobble events to Trakt.tv with viewing progress
+5. Trakt.tv records the viewing activity in your account
 
-1. Ve a **Plex Web → Configuración → Webhooks**
-2. Haz clic en **"+"** para agregar un nuevo webhook  
-3. Pega esta URL: `http://localhost:3000/webhook`
-4. Guarda
-
-### 4. ¡Pruébalo!
-
-- Reproduce cualquier contenido en Plex
-- Verás los logs en la terminal
-- Revisa tu perfil de Trakt.tv para confirmar la sincronización
-
-## Comandos Disponibles
-
-```bash
-# Mostrar ayuda
-npm start
-# o
-node index.js help
-
-# Autenticar con Trakt.tv
-npm run auth
-# o  
-node index.js auth
-
-# Iniciar listener de webhooks
-npm run listen
-# o
-node index.js listen
-
-# Ver estado de la conexión
-node index.js status
-```
-
-## Cómo encontrar tu ID de usuario
-
-Si quieres usar `PLEX_ALLOWED_USER_IDS`:
-
-1. Ejecuta `npm run listen`
-2. Reproduce algo en Plex
-3. En la terminal verás algo como:
-```
-📡 Webhook recibido: {
-  user: 'Tu Nombre',
-  userId: '12345',
-  ...
-}
-```
-4. Usa ese `userId` en tu `.env`
-
-## Troubleshooting
-
-### "No valid Trakt token"
-- Ejecuta `npm run auth` primero
-
-### "Usuario no autorizado"
-- Revisa tu configuración de filtros en `.env`
-- Usa `node index.js status` para ver la configuración actual
-
-### Webhook no funciona
-- Verifica que Plex pueda acceder a `http://localhost:3000/webhook`
-- Si usas Docker/red externa, cambia `WEBHOOK_BASE_URL` a tu IP pública
-
-### Puerto ocupado
-- Cambia `WEBHOOK_PORT` en `.env` a otro puerto (ej: 3001)
-- Actualiza la URL en Plex accordingly
-
-## Estructura del Proyecto
+## File Structure
 
 ```
 plex-trakt/
-├── index.js           # Punto de entrada CLI
-├── cli.js             # Lógica de comandos CLI  
-├── webhookServer.js   # Servidor HTTP para webhooks
-├── config.js          # Configuración y validación
-├── tokenManager.js    # Manejo de tokens de Trakt
-├── traktApi.js        # Funciones de la API de Trakt
-├── userAuth.js        # Autorización de usuarios
-├── webhookHandlers.js # Procesamiento de webhooks de Plex
-└── .env               # Tu configuración
+├── index.js          # Main CLI application
+├── server.js         # HTTP server and webhook handler
+├── trakt.js          # Trakt.tv API client and token management
+├── config.js         # Configuration and validation
+├── package.json      # Dependencies and scripts
+└── .env              # Environment variables (create this)
 ```
 
-## Funcionalidades
+## Troubleshooting
 
-- ✅ Scrobbling automático (play/pause/stop)
-- ✅ Series y películas
-- ✅ Búsqueda inteligente en Trakt
-- ✅ Renovación automática de tokens
-- ✅ Filtros de usuario flexibles
-- ✅ Logs detallados para debugging
-- ✅ CLI simple sin interfaz web
+**Authentication fails:**
+- Check your Trakt.tv client ID and secret
+- Ensure redirect URI matches your webhook base URL + `/callback`
 
----
+**Webhooks not received:**
+- Verify the webhook URL is accessible from Plex
+- Check firewall settings if using external access
+- Test the webhook URL in a browser - it should show a setup page
 
-**¡Disfruta sincronizando tu contenido de Plex con Trakt.tv! 🎬**
+**Scrobbling fails:**
+- Check that content exists on Trakt.tv
+- Verify your Trakt token is valid: `node index.js status`
+- Look for error messages in the console output
+
+## Development
+
+The code is structured for simplicity:
+
+- **trakt.js**: All Trakt.tv API interactions and token management
+- **server.js**: HTTP server, webhook processing, and user authorization  
+- **index.js**: CLI interface and main application logic
+- **config.js**: Environment configuration and validation
+
+## License
+
+ISC
