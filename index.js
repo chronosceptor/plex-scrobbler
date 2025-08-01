@@ -268,6 +268,80 @@ app.get(CONFIG.server.webhookPath, (req, res) => {
   `);
 });
 
+// Función para buscar una serie en Trakt y obtener el año correcto
+async function searchShowInTrakt(showTitle) {
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'trakt-api-version': '2',
+      'trakt-api-key': CONFIG.trakt.clientId
+    };
+    
+    const searchUrl = `${CONFIG.trakt.apiUrl}/search/show?query=${encodeURIComponent(showTitle)}`;
+    const response = await axios.get(searchUrl, { headers });
+    
+    if (response.data && response.data.length > 0) {
+      // Tomar el primer resultado (más relevante)
+      const firstResult = response.data[0];
+      if (firstResult.show) {
+        console.log(`🔍 Serie encontrada en Trakt: "${firstResult.show.title}" (${firstResult.show.year})`);
+        return {
+          title: firstResult.show.title,
+          year: firstResult.show.year,
+          ids: firstResult.show.ids
+        };
+      }
+    }
+    
+    console.log(`❌ No se encontró "${showTitle}" en la búsqueda de series en Trakt`);
+    return null;
+  } catch (error) {
+    console.error('❌ Error buscando serie en Trakt:', error.response?.status, error.response?.data);
+    return null;
+  }
+}
+
+// Función para buscar una película en Trakt y obtener el año correcto
+async function searchMovieInTrakt(movieTitle) {
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'trakt-api-version': '2',
+      'trakt-api-key': CONFIG.trakt.clientId
+    };
+    
+    const searchUrl = `${CONFIG.trakt.apiUrl}/search/movie?query=${encodeURIComponent(movieTitle)}`;
+    console.log(`🔍 Buscando película: ${searchUrl}`);
+    const response = await axios.get(searchUrl, { headers });
+    
+    if (response.data && response.data.length > 0) {
+      // Mostrar los primeros resultados para debug
+      console.log(`📋 Encontradas ${response.data.length} películas, primeros 3 resultados:`);
+      response.data.slice(0, 3).forEach((result, index) => {
+        if (result.movie) {
+          console.log(`   ${index + 1}. "${result.movie.title}" (${result.movie.year}) - Score: ${result.score || 'N/A'}`);
+        }
+      });
+      
+      // Tomar el primer resultado (más relevante)
+      const firstResult = response.data[0];
+      if (firstResult.movie) {
+        console.log(`✅ Usando: "${firstResult.movie.title}" (${firstResult.movie.year})`);
+        return {
+          title: firstResult.movie.title,
+          year: firstResult.movie.year,
+          ids: firstResult.movie.ids
+        };
+      }
+    }
+    
+    console.log(`❌ No se encontró "${movieTitle}" en la búsqueda de películas en Trakt`);
+    return null;
+  } catch (error) {
+    console.error('❌ Error buscando película en Trakt:', error.response?.status, error.response?.data);
+    return null;
+  }
+}
 // PASO 3: Procesar eventos de Plex
 async function handlePlexEvent(payload) {
   const { event, Metadata } = payload;
@@ -292,27 +366,35 @@ async function handlePlexEvent(payload) {
         return;
       }
       
-      // Lógica inteligente para determinar el año de la serie
-      let finalYear;
+      // Buscar la serie en Trakt para obtener el año correcto
+      console.log(`🔍 Buscando "${Metadata.grandparentTitle}" en Trakt...`);
+      const traktShow = await searchShowInTrakt(Metadata.grandparentTitle);
       
-      if (Metadata.grandparentYear) {
-        // Si tenemos el año de la serie, úsalo directamente
-        finalYear = parseInt(Metadata.grandparentYear);
-        console.log(`📅 Usando año de la serie: ${finalYear}`);
-      } else if (Metadata.year) {
-        // Si solo tenemos el año del episodio, úsalo tal como está
-        // Trakt es lo suficientemente inteligente para encontrar la serie correcta
-        finalYear = parseInt(Metadata.year);
-        console.log(`📅 Usando año del episodio: ${finalYear}`);
+      let finalYear;
+      let finalTitle = Metadata.grandparentTitle;
+      
+      if (traktShow) {
+        // Usar datos de Trakt
+        finalYear = traktShow.year;
+        finalTitle = traktShow.title; // Por si hay ligeras diferencias en el título
+        console.log(`✅ Usando datos de Trakt: "${finalTitle}" (${finalYear})`);
       } else {
-        // Sin año, intentar sin especificar año
-        finalYear = null;
-        console.log(`⚠️ Sin información de año disponible`);
+        // Fallback a lógica anterior
+        if (Metadata.grandparentYear) {
+          finalYear = parseInt(Metadata.grandparentYear);
+          console.log(`📅 Usando año de la serie: ${finalYear}`);
+        } else if (Metadata.year) {
+          finalYear = parseInt(Metadata.year);
+          console.log(`📅 Usando año del episodio: ${finalYear}`);
+        } else {
+          finalYear = null;
+          console.log(`⚠️ Sin información de año disponible`);
+        }
       }
       
       traktData = {
         shows: [{
-          title: Metadata.grandparentTitle,
+          title: finalTitle,
           // Incluir año si lo tenemos
           ...(finalYear ? { year: finalYear } : {}),
           seasons: [{
@@ -326,7 +408,8 @@ async function handlePlexEvent(payload) {
       };
       
       console.log('📺 Datos de serie preparados:', {
-        series: Metadata.grandparentTitle,    
+        originalSeries: Metadata.grandparentTitle,
+        finalSeries: finalTitle,    
         episodeYear: Metadata.year || 'N/A',
         seriesYear: Metadata.grandparentYear || 'N/A', 
         yearUsed: finalYear || 'Sin año',
@@ -345,16 +428,36 @@ async function handlePlexEvent(payload) {
         return;
       }
       
+      // Buscar la película en Trakt para obtener datos correctos
+      console.log(`🔍 Buscando película "${Metadata.title}" en Trakt...`);
+      const traktMovie = await searchMovieInTrakt(Metadata.title);
+      
+      let finalYear;
+      let finalTitle = Metadata.title;
+      
+      if (traktMovie) {
+        // Usar datos de Trakt
+        finalYear = traktMovie.year;
+        finalTitle = traktMovie.title; // Por si hay ligeras diferencias en el título
+        console.log(`✅ Usando datos de Trakt: "${finalTitle}" (${finalYear})`);
+      } else {
+        // Fallback a datos de Plex
+        finalYear = parseInt(Metadata.year) || null;
+        console.log(`📅 Usando datos de Plex: "${finalTitle}" (${finalYear || 'sin año'})`);
+      }
+      
       traktData = {
         movies: [{
-          title: Metadata.title,
-          year: parseInt(Metadata.year) || null
+          title: finalTitle,
+          year: finalYear
         }]
       };
       
       console.log('🎬 Datos de película preparados:', {
-        title: Metadata.title,
-        year: Metadata.year
+        originalTitle: Metadata.title,
+        finalTitle: finalTitle,
+        originalYear: Metadata.year,
+        finalYear: finalYear
       });
     }
     
@@ -480,6 +583,31 @@ async function sendToTrakt(action, data, metadata) {
         console.log(`   🎬 Película: "${metadata.title}"`);
         console.log(`   📅 Año: ${metadata.year || 'N/A'}`);
         console.log(`   🔍 Buscar en: https://trakt.tv/search?query=${encodeURIComponent(metadata.title)}`);
+        
+        // Intentar fallback: buscar película sin año específico
+        console.log('🔄 Intentando fallback: buscando película sin año específico...');
+        try {
+          const fallbackData = {
+            movies: [{
+              title: metadata.title
+              // Sin año para que Trakt busque cualquier versión
+            }]
+          };
+          
+          const fallbackHeaders = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${traktAccessToken}`,
+            'trakt-api-version': '2',
+            'trakt-api-key': CONFIG.trakt.clientId
+          };
+          
+          console.log('🔄 Payload de fallback:', JSON.stringify(fallbackData, null, 2));
+          const fallbackResponse = await axios.post(`${CONFIG.trakt.apiUrl}/sync/history`, fallbackData, { headers: fallbackHeaders });
+          console.log('✅ Fallback exitoso: Película marcada en historial general');
+        } catch (fallbackError) {
+          console.log('❌ Fallback también falló:', fallbackError.response?.status, fallbackError.response?.data);
+          console.log('💡 Solución manual: Ve a https://trakt.tv y agrega la película manualmente a tu lista');
+        }
       }
       console.log('💡 Posibles soluciones:');
       console.log('   1. Verifica que el contenido existe en la URL de arriba');
