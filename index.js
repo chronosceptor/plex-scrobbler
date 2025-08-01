@@ -2,10 +2,19 @@ const express = require('express');
 const axios = require('axios');
 const multer = require('multer');
 const querystring = require('querystring');
+const fs = require('fs').promises;
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 const upload = multer();
+
+// Archivo para persistir tokens
+const TOKEN_FILE = path.join(__dirname, 'trakt_tokens.json');
+
+// Variables globales para tokens
+let traktAccessToken = null;
+let traktRefreshToken = null;
 
 // Configuración desde variables de entorno
 const CONFIG = {
@@ -24,13 +33,17 @@ const CONFIG = {
     port: parseInt(process.env.SERVER_PORT) || 3000,
     webhookPath: process.env.WEBHOOK_PATH || '/webhook',
     baseUrl: process.env.BASE_URL || `http://localhost:${process.env.SERVER_PORT || 3000}`,
-    basePath: process.env.BASE_PATH || '' // Para rutas con prefijo
+    basePath: process.env.BASE_PATH || ''
   },
   app: {
     logLevel: process.env.LOG_LEVEL || 'info',
     nodeEnv: process.env.NODE_ENV || 'development'
   }
 };
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Funciones para manejar tokens
 async function saveTokens(accessToken, refreshToken) {
@@ -60,10 +73,6 @@ async function loadTokens() {
     return false;
   }
 }
-
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 // Validar configuración al inicio
 function validateConfig() {
@@ -123,17 +132,57 @@ app.get('/callback', async (req, res) => {
     traktAccessToken = tokenResponse.data.access_token;
     traktRefreshToken = tokenResponse.data.refresh_token;
     
+    // Guardar tokens en archivo
+    await saveTokens(traktAccessToken, traktRefreshToken);
+    
     console.log('✅ Autenticación exitosa con Trakt.tv');
     res.send(`
       <h1>¡Autenticación exitosa!</h1>
       <p>Tu Plex Scrobbler está ahora conectado con Trakt.tv</p>
-      <p><a href="/plex-scrobbler/">← Volver al inicio</a></p>
+      <p><a href="/">← Volver al inicio</a></p>
     `);
   } catch (error) {
     console.error('❌ Error en autenticación:', error.response?.data || error.message);
     res.status(500).send('Error en la autenticación');
   }
 });
+
+// FUNCIÓN PARA VERIFICAR SI EL USUARIO ESTÁ AUTORIZADO
+function isAllowedUser(payload) {
+  const account = payload.Account;
+  
+  if (!account) {
+    console.log('⚠️ Sin información de cuenta en el payload');
+    return false;
+  }
+  
+  // Método 1: Solo el propietario del servidor
+  if (CONFIG.plex.ownerOnly && payload.owner) {
+    console.log('✅ Usuario autorizado (propietario del servidor)');
+    return true;
+  }
+  
+  // Método 2: Lista de nombres de usuario permitidos
+  if (CONFIG.plex.allowedUsers && CONFIG.plex.allowedUsers.length > 0) {
+    const isAllowed = CONFIG.plex.allowedUsers.includes(account.title);
+    if (isAllowed) {
+      console.log(`✅ Usuario autorizado por nombre: ${account.title}`);
+      return true;
+    }
+  }
+  
+  // Método 3: Lista de IDs de usuario permitidos (más seguro)
+  if (CONFIG.plex.allowedUserIds && CONFIG.plex.allowedUserIds.length > 0) {
+    const isAllowed = CONFIG.plex.allowedUserIds.includes(String(account.id));
+    if (isAllowed) {
+      console.log(`✅ Usuario autorizado por ID: ${account.id}`);
+      return true;
+    }
+  }
+  
+  console.log(`❌ Usuario NO autorizado: ${account.title} (ID: ${account.id})`);
+  return false;
+}
 
 // PASO 2: Webhook de Plex
 app.post(CONFIG.server.webhookPath, upload.single('thumb'), async (req, res) => {
@@ -147,7 +196,6 @@ app.post(CONFIG.server.webhookPath, upload.single('thumb'), async (req, res) => 
       owner: payload.owner,
       media: payload.Metadata?.title,
       type: payload.Metadata?.type,
-      // Información adicional para debugging
       show: payload.Metadata?.grandparentTitle,
       season: payload.Metadata?.parentIndex,
       episode: payload.Metadata?.index,
@@ -213,43 +261,6 @@ app.get(CONFIG.server.webhookPath, (req, res) => {
     <p><a href="${CONFIG.server.baseUrl}/">← Volver al dashboard</a></p>
   `);
 });
-
-// FUNCIÓN PARA VERIFICAR SI EL USUARIO ESTÁ AUTORIZADO
-function isAllowedUser(payload) {
-  const account = payload.Account;
-  
-  if (!account) {
-    console.log('⚠️ Sin información de cuenta en el payload');
-    return false;
-  }
-  
-  // Método 1: Solo el propietario del servidor
-  if (CONFIG.plex.ownerOnly && payload.owner) {
-    console.log('✅ Usuario autorizado (propietario del servidor)');
-    return true;
-  }
-  
-  // Método 2: Lista de nombres de usuario permitidos
-  if (CONFIG.plex.allowedUsers && CONFIG.plex.allowedUsers.length > 0) {
-    const isAllowed = CONFIG.plex.allowedUsers.includes(account.title);
-    if (isAllowed) {
-      console.log(`✅ Usuario autorizado por nombre: ${account.title}`);
-      return true;
-    }
-  }
-  
-  // Método 3: Lista de IDs de usuario permitidos (más seguro)
-  if (CONFIG.plex.allowedUserIds && CONFIG.plex.allowedUserIds.length > 0) {
-    const isAllowed = CONFIG.plex.allowedUserIds.includes(String(account.id));
-    if (isAllowed) {
-      console.log(`✅ Usuario autorizado por ID: ${account.id}`);
-      return true;
-    }
-  }
-  
-  console.log(`❌ Usuario NO autorizado: ${account.title} (ID: ${account.id})`);
-  return false;
-}
 
 // PASO 3: Procesar eventos de Plex
 async function handlePlexEvent(payload) {
@@ -365,7 +376,6 @@ async function sendToTrakt(action, data, metadata) {
   switch (action) {
     case 'start':
       endpoint = '/scrobble/start';
-      // Calcular progreso si está disponible
       if (metadata.viewOffset && metadata.duration) {
         payload.progress = Math.round((metadata.viewOffset / metadata.duration) * 100);
       } else {
@@ -415,7 +425,7 @@ async function sendToTrakt(action, data, metadata) {
       statusText: error.response?.statusText,
       data: error.response?.data,
       url: `${CONFIG.trakt.apiUrl}${endpoint}`,
-      headers: { ...headers, Authorization: '[HIDDEN]' }, // Ocultar token en logs
+      headers: { ...headers, Authorization: '[HIDDEN]' },
       sentPayload: payload,
       mediaInfo: {
         title: metadata.title || metadata.grandparentTitle,
@@ -430,7 +440,6 @@ async function sendToTrakt(action, data, metadata) {
     if (error.response?.status === 401) {
       console.log('🔄 Token expirado, renovando...');
       await refreshTraktToken();
-      // Reintentar una vez
       console.log('🔄 Reintentando con token renovado...');
       await sendToTrakt(action, data, metadata);
     } else if (error.response?.status === 404) {
@@ -485,7 +494,7 @@ app.get('/', (req, res) => {
     'Sin filtro configurado';
   
   // Verificar estado de token de forma segura
-  const isAuthenticated = traktAccessToken ? true : false;
+  const isAuthenticated = Boolean(traktAccessToken);
     
   res.send(`
     <style>
@@ -563,18 +572,26 @@ PLEX_ALLOWED_USER_IDS=12345
 # Para solo propietario:
 PLEX_OWNER_ONLY=true</pre>
     
-    <p><a href="/">← Volver al inicio</a></p>
+    <p><a href="/plex-scrobbler/">← Volver al inicio</a></p>
   `);
 });
 
 // Iniciar servidor
-app.listen(CONFIG.server.port, () => {
+app.listen(CONFIG.server.port, async () => {
+  // Validar configuración primero
   validateConfig();
+  
+  // Cargar tokens guardados al iniciar
+  await loadTokens();
+  
   console.log(`🚀 Servidor iniciado en puerto ${CONFIG.server.port}`);
   console.log(`📡 Webhook URL: ${CONFIG.server.baseUrl}${CONFIG.server.webhookPath}`);
   console.log(`🔐 Autenticación: ${CONFIG.server.baseUrl}/auth`);
   console.log(`🌐 Dashboard: ${CONFIG.server.baseUrl}/`);
   console.log(`🏠 Entorno: ${CONFIG.app.nodeEnv}`);
+  
+  // Mostrar estado de tokens
+  console.log(`🔑 Token estado:`, traktAccessToken ? 'Disponible' : 'No disponible');
   
   // Mostrar información adicional en desarrollo
   if (CONFIG.app.nodeEnv === 'development') {
