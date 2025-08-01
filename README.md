@@ -78,7 +78,7 @@ node index.js status  # Show connection status
 Control who can scrobble to your Trakt account by setting the `PLEX_ALLOWED_USER` environment variable to a specific Plex username:
 
 ```env
-PLEX_ALLOWED_USER=cienciastar
+PLEX_ALLOWED_USER=chronosceptor
 ```
 
 Only the user with this exact Plex username will be able to scrobble viewing activity to your Trakt account. All other users will be ignored for security.
