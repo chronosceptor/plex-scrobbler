@@ -109,11 +109,44 @@ async function checkEpisodeInTrakt(showSlug, season, episode) {
   }
 }
 
+async function testTraktConnection() {
+  const { accessToken } = getTokens();
+  
+  if (!accessToken) {
+    console.log('❌ No hay token de acceso para test');
+    return false;
+  }
+  
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`,
+      'trakt-api-version': '2',
+      'trakt-api-key': CONFIG.trakt.clientId
+    };
+    
+    // Test simple: obtener información del usuario
+    const response = await axios.get(`${CONFIG.trakt.apiUrl}/users/settings`, { headers });
+    console.log('✅ Conexión con Trakt OK, usuario:', response.data.user?.username || 'desconocido');
+    return true;
+  } catch (error) {
+    console.log('❌ Error en test de conexión:', error.response?.status, error.response?.statusText);
+    return false;
+  }
+}
+
 async function sendToTrakt(action, data, metadata) {
   const { accessToken } = getTokens();
   
   if (!accessToken) {
     console.log('❌ No hay token de acceso disponible');
+    return;
+  }
+  
+  // Test de conexión antes del scrobble
+  const connectionOk = await testTraktConnection();
+  if (!connectionOk) {
+    console.log('⚠️ Saltando scrobble debido a problemas de conexión');
     return;
   }
   
@@ -221,6 +254,14 @@ async function sendToTrakt(action, data, metadata) {
       payload: JSON.stringify(payload, null, 2)
     });
     
+    // Log para debugging de headers (sin mostrar el token completo)
+    console.log('📋 Headers enviados:', {
+      'Content-Type': headers['Content-Type'],
+      'trakt-api-version': headers['trakt-api-version'],
+      'trakt-api-key': headers['trakt-api-key'],
+      'Authorization': 'Bearer [HIDDEN]'
+    });
+    
     const response = await axios.post(`${CONFIG.trakt.apiUrl}${endpoint}`, payload, { headers });
     
     console.log(`✅ ${action.toUpperCase()} enviado a Trakt exitosamente:`, {
@@ -326,5 +367,6 @@ module.exports = {
   checkEpisodeInTrakt,
   sendToTrakt,
   refreshTraktToken,
-  exchangeCodeForTokens
+  exchangeCodeForTokens,
+  testTraktConnection
 };
