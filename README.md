@@ -6,7 +6,7 @@ A simple CLI tool to automatically sync your Plex viewing activity to Trakt.tv u
 
 - 🎬 Automatically scrobbles movies and TV episodes from Plex to Trakt
 - 🔄 Real-time syncing via Plex webhooks
-- 👤 User filtering (owner only, specific users, or all users)
+- 👤 User filtering (restrict to specific Plex user)
 - 🔐 Secure OAuth authentication with Trakt.tv
 - 📊 Progress tracking for pause/resume functionality
 
@@ -55,15 +55,13 @@ TRAKT_CLIENT_SECRET=your_client_secret
 
 # Optional - Server configuration
 WEBHOOK_PORT=3000
+PORT=3000
 WEBHOOK_BASE_URL=http://localhost:3000
 WEBHOOK_PATH=/webhook
 
 # Optional - User filtering
-PLEX_OWNER_ONLY=true
-# OR
-PLEX_ALLOWED_USERS=user1,user2,user3
-# OR
-PLEX_ALLOWED_USER_IDS=123,456,789
+# Only allow this specific Plex user to scrobble to Trakt
+PLEX_ALLOWED_USER=your_plex_username
 ```
 
 ## Commands
@@ -77,12 +75,13 @@ node index.js status  # Show connection status
 
 ## User Filtering
 
-Control who can scrobble to your Trakt account:
+Control who can scrobble to your Trakt account by setting the `PLEX_ALLOWED_USER` environment variable to a specific Plex username:
 
-- **Owner only**: `PLEX_OWNER_ONLY=true`
-- **Specific users**: `PLEX_ALLOWED_USERS=john,jane,bob`
-- **Specific user IDs**: `PLEX_ALLOWED_USER_IDS=123,456,789`
-- **All users**: Leave all filtering options empty
+```env
+PLEX_ALLOWED_USER=cienciastar
+```
+
+Only the user with this exact Plex username will be able to scrobble viewing activity to your Trakt account. All other users will be ignored for security.
 
 ## How It Works
 

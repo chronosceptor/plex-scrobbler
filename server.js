@@ -118,17 +118,10 @@ class Server {
   }
 
   async processWebhook(payload, res) {
-    const { event, Metadata, Account, owner } = payload;
-    
-    // Debug logging
-    console.log('🔍 Webhook payload debug:');
-    console.log('  Event:', event);
-    console.log('  Account:', Account ? { id: Account.id, title: Account.title } : 'null');
-    console.log('  Owner field:', owner);
-    console.log('  PLEX_OWNER_ONLY setting:', CONFIG.plex.ownerOnly);
+    const { event, Metadata, Account } = payload;
     
     // User authorization check
-    if (!this.isAllowedUser(Account, owner)) {
+    if (!this.isAllowedUser(Account)) {
       console.log('⚠️ Unauthorized user, ignoring event');
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       res.end('Unauthorized user');
@@ -234,25 +227,16 @@ class Server {
     await scrobble(action, 'movie', data, progress);
   }
 
-  isAllowedUser(account, isOwner) {
+  isAllowedUser(account) {
     if (!account) return false;
     
-    // Owner-only mode: only allow owners
-    if (CONFIG.plex.ownerOnly) {
-      return isOwner;
+    // If specific user is configured, only allow that user
+    if (CONFIG.plex.allowedUser) {
+      return account.title === CONFIG.plex.allowedUser;
     }
     
-    // Specific user filtering
-    if (CONFIG.plex.allowedUsers?.length > 0) {
-      return CONFIG.plex.allowedUsers.includes(account.title);
-    }
-    
-    if (CONFIG.plex.allowedUserIds?.length > 0) {
-      return CONFIG.plex.allowedUserIds.includes(String(account.id));
-    }
-    
-    // If no filters configured, allow all users
-    return true;
+    // If no user filter configured, deny all users for security
+    return false;
   }
 
   showWebhookInfo(res) {

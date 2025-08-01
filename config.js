@@ -8,9 +8,7 @@ const CONFIG = {
     apiUrl: 'https://api.trakt.tv'
   },
   plex: {
-    ownerOnly: process.env.PLEX_OWNER_ONLY === 'true',
-    allowedUsers: process.env.PLEX_ALLOWED_USERS?.split(',').map(u => u.trim()).filter(Boolean) || [],
-    allowedUserIds: process.env.PLEX_ALLOWED_USER_IDS?.split(',').map(id => id.trim()).filter(Boolean) || []
+    allowedUser: process.env.PLEX_ALLOWED_USER?.trim() || null
   },
   server: {
     port: parseInt(process.env.WEBHOOK_PORT) || parseInt(process.env.PORT) || 3000,
