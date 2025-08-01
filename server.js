@@ -120,6 +120,13 @@ class Server {
   async processWebhook(payload, res) {
     const { event, Metadata, Account, owner } = payload;
     
+    // Debug logging
+    console.log('🔍 Webhook payload debug:');
+    console.log('  Event:', event);
+    console.log('  Account:', Account ? { id: Account.id, title: Account.title } : 'null');
+    console.log('  Owner field:', owner);
+    console.log('  PLEX_OWNER_ONLY setting:', CONFIG.plex.ownerOnly);
+    
     // User authorization check
     if (!this.isAllowedUser(Account, owner)) {
       console.log('⚠️ Unauthorized user, ignoring event');
