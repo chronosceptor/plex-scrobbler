@@ -11,12 +11,20 @@ async function searchShowInTrakt(showTitle) {
     };
     
     const searchUrl = `${CONFIG.trakt.apiUrl}/search/show?query=${encodeURIComponent(showTitle)}`;
+    console.log(`🔍 Buscando serie en Trakt: ${searchUrl}`);
     const response = await axios.get(searchUrl, { headers });
     
     if (response.data && response.data.length > 0) {
+      console.log(`📋 Encontradas ${response.data.length} series, primeros 3 resultados:`);
+      response.data.slice(0, 3).forEach((result, index) => {
+        if (result.show) {
+          console.log(`   ${index + 1}. "${result.show.title}" (${result.show.year}) - Score: ${result.score || 'N/A'}`);
+        }
+      });
+      
       const firstResult = response.data[0];
       if (firstResult.show) {
-        console.log(`🔍 Serie encontrada en Trakt: "${firstResult.show.title}" (${firstResult.show.year})`);
+        console.log(`✅ Usando: "${firstResult.show.title}" (${firstResult.show.year})`);
         return {
           title: firstResult.show.title,
           year: firstResult.show.year,
@@ -157,7 +165,7 @@ async function sendToTrakt(action, data, metadata) {
         show: {
           title: show.title,
           year: show.year,
-          ids: {}
+          ids: show.ids || {}
         }
       },
       progress: progress
@@ -225,8 +233,12 @@ async function sendToTrakt(action, data, metadata) {
       console.log('🔄 Reintentando con token renovado...');
       await sendToTrakt(action, data, metadata);
     } else if (error.response?.status === 404) {
-      console.log(`⚠️ ERROR 404 - Contenido no encontrado en Trakt con formato correcto`);
-      console.log('💡 Intentando método de fallback...');
+      console.log(`⚠️ ERROR 404 - Contenido no encontrado en Trakt`);
+      console.log('💡 Esto puede ocurrir si:');
+      console.log('   - La serie/película no existe en la base de datos de Trakt');
+      console.log('   - El episodio específico no existe en esa temporada');
+      console.log('   - Los datos de búsqueda no coinciden exactamente');
+      console.log('🔍 Verifica que el contenido existe en trakt.tv manualmente');
     } else if (error.response?.status === 422) {
       console.log(`⚠️ ERROR 422 - Datos inválidos enviados a Trakt:`);
       console.log('   Los datos enviados no cumplen con el formato esperado');

@@ -62,6 +62,7 @@ async function handlePlexEvent(payload) {
         shows: [{
           title: finalTitle,
           ...(finalYear ? { year: finalYear } : {}),
+          ...(traktShow?.ids ? { ids: traktShow.ids } : {}),
           seasons: [{
             number: parseInt(Metadata.parentIndex),
             episodes: [{
@@ -167,23 +168,52 @@ async function processWebhook(req, res) {
     
     if (!isAllowedUser(payload)) {
       console.log('⚠️ Usuario no autorizado, ignorando evento');
-      return res.status(200).send('Usuario no autorizado');
+      if (res.status) {
+        return res.status(200).send('Usuario no autorizado');
+      } else {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('Usuario no autorizado');
+        return;
+      }
     }
     
     if (!['media.play', 'media.pause', 'media.resume', 'media.stop', 'media.scrobble'].includes(payload.event)) {
-      return res.status(200).send('Evento ignorado');
+      if (res.status) {
+        return res.status(200).send('Evento ignorado');
+      } else {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('Evento ignorado');
+        return;
+      }
     }
     
     if (!['episode', 'movie'].includes(payload.Metadata?.type)) {
-      return res.status(200).send('Tipo de media no soportado');
+      if (res.status) {
+        return res.status(200).send('Tipo de media no soportado');
+      } else {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('Tipo de media no soportado');
+        return;
+      }
     }
     
     await handlePlexEvent(payload);
-    res.status(200).send('OK');
+    
+    if (res.status) {
+      res.status(200).send('OK');
+    } else {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('OK');
+    }
     
   } catch (error) {
     console.error('❌ Error procesando webhook:', error);
-    res.status(500).send('Error interno');
+    if (res.status) {
+      res.status(500).send('Error interno');
+    } else {
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Error interno');
+    }
   }
 }
 
