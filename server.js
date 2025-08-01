@@ -230,8 +230,12 @@ class Server {
   isAllowedUser(account, isOwner) {
     if (!account) return false;
     
-    if (CONFIG.plex.ownerOnly && isOwner) return true;
+    // Owner-only mode: only allow owners
+    if (CONFIG.plex.ownerOnly) {
+      return isOwner;
+    }
     
+    // Specific user filtering
     if (CONFIG.plex.allowedUsers?.length > 0) {
       return CONFIG.plex.allowedUsers.includes(account.title);
     }
@@ -241,7 +245,7 @@ class Server {
     }
     
     // If no filters configured, allow all users
-    return !CONFIG.plex.ownerOnly && !CONFIG.plex.allowedUsers?.length && !CONFIG.plex.allowedUserIds?.length;
+    return true;
   }
 
   showWebhookInfo(res) {
