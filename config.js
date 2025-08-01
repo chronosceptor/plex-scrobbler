@@ -13,9 +13,9 @@ const CONFIG = {
     allowedUserIds: process.env.PLEX_ALLOWED_USER_IDS?.split(',').map(id => id.trim()).filter(Boolean) || []
   },
   server: {
-    port: parseInt(process.env.WEBHOOK_PORT) || 3000,
+    port: parseInt(process.env.WEBHOOK_PORT) || parseInt(process.env.PORT) || 3000,
     webhookPath: process.env.WEBHOOK_PATH || '/webhook',
-    baseUrl: process.env.WEBHOOK_BASE_URL || `http://localhost:${process.env.WEBHOOK_PORT || 3000}`
+    baseUrl: process.env.WEBHOOK_BASE_URL || `http://localhost:${process.env.WEBHOOK_PORT || process.env.PORT || 3000}`
   }
 };
 
